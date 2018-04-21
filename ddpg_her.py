@@ -75,7 +75,7 @@ class DDPGHER(DDPG):
                     ### env.set_goal_state and env.get_goal_state
                     ### needs to be defined
                     for t in range(len(_transitions)):
-                    	observation, action, reward, terminal, goal = _transitions[i]
+                    	observation, action, reward, terminal, goal = _transitions[t]
                     	observation_goal = concat(observation, goal)
                     	pool.add_sample(observation_goal, action, reward, terminal)
                     	G = strategy(_episode)
