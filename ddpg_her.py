@@ -90,6 +90,10 @@ class DDPGHER(DDPG):
                     ### reset transitions and episodes
                     _transitions = []
                     _episode = []
+                    observation = self.env.reset()
+                    self.es.reset()
+                    sample_policy.reset()
+                    
 
 
                 action = self.es.get_action(itr, observation, policy=sample_policy)
