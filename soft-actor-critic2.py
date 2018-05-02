@@ -4,8 +4,8 @@ class ValueNetwork(object):
 	def __init__(self):
 		pass
 
-	def _build_network(self, scope='Value', reuse=False):
-		state = tf.placeholder(tf.float32, shape=[None, self.state_dim])
+	def _build_network(self, state, scope='Value', reuse=False):
+		#state is tf.placeholder(tf.float32, shape=[None, self.state_dim])
 		with tf.variable_scope(scope+'/dense1'):
 			net = tf.layers.dense(state, 400, activation=tf.nn.relu, reuse=reuse)
 			net = tf.contrib.layers.layer_norm(net)
@@ -20,7 +20,8 @@ class ValueNetwork(object):
 		return state, preds
 
 	def _build_optimizer(self):
-		self.inputs, self.preds = self._build_network()
+		state = tf.placeholder(tf.float32, shape=[None, self.state_dim])
+		self.state, self.preds = self._build_network(state)
 		self.net_params = tf.trainable_variables(scope='Value')
 
 	def predict(self, state):
@@ -41,9 +42,7 @@ class CriticNetwork(object):
 
 		self._build_optimizer()
 
-	def _build_network(self, scope='Critic', reuse=False):
-		state = tf.placeholder(tf.float32, shape=[None, self.state_dim])
-		action = tf.placeholder(tf.float32, shape=[None, self.action_dim])
+	def _build_network(self, state, action, scope='Critic', reuse=False):
 		next_state = tf.placeholder(tf.float32, shape=[None, self.state_dim])
 		reward = tf.placeholder(tf.float32, shape=[None, 1])
 		terminal = tf.placeholder(tf.float32, shape=[None, 1])
@@ -62,20 +61,22 @@ class CriticNetwork(object):
 
 
 	def _build_optimizer(self):
-		self.state, self.action, self.preds, self.next_state, self.reward, self.terminal = self._build_network()
+		state = tf.placeholder(tf.float32, shape=[None, self.state_dim])
+		action = tf.placeholder(tf.float32, shape=[None, self.action_dim])
+		self.state, self.action, self.preds, self.next_state, self.reward, self.terminal = self._build_network(state, action)
 		self.net_params = tf.trainable_variables(scope='Critic')
 
-		v_next_state = self.value_net.predict(self.next_state)
+		v_next_state, _ = self.value_net._build_network(self.next_state, reuse=True)
 		q_target = self.reward + self.gamma*(1-self.terminal)*v_next_state
-		Jq = 0.5*tf.reduce_mean((self.preds - q_target)**2.0)
-		del_Jqs = [tf.gradients(xs=param, ys=Jq) for param in self.net_params]
+		self.Jq = 0.5*tf.reduce_mean((self.preds - q_target)**2.0)
+		del_Jqs = [tf.gradients(xs=param, ys=self.Jq) for param in self.net_params]
 		for i in range(len(self.net_params)):
 			self.net_params[i].assign(self.net_params[i] - lambda_q*del_Jqs[i])
 		self.train_op = self.net_params
 
 	def train(self, *args):
 		# args (state, action, next_state, reward, terminal)
-		return self.sess.run([self.preds, self.train_op], feed_dict={
+		return self.sess.run([self.preds, self.Jq, self.train_op], feed_dict={
 			self.state: args[0],
 			self.action: args[1],
 			self.next_state: args[2],
@@ -93,11 +94,36 @@ class CriticNetwork(object):
 
 
 class ActorNetwork(object):
-	#value_net is a ValueNetwork object
-	def __init__(self, sess, state_dim, action_dim, value_net, critic_net):
+	# TO NOTE: policy is a gmm policy
+	def __init__(self, sess, state_dim, action_dim, value_net, critic_net, lambda_pi):
 		pass
 
-	def _build_network(self, scope='Actor', reuse=False):
+	def _build_network(self, state, scope='Actor', reuse=False):
+		# action needs to be sampled using GMM
 		pass
 
 	def _build_optimizer(self):
+		state = tf.placeholder(tf.float32, shape=[None, self.state_dim])
+		self.state, self.action = self._build_network(state)
+
+		logpi_target_q = self.critic_net._build_network(self.state, self.action, reuse=True)
+		logpi_target_v = self.value_net._build_network(self.state, reuse=True)
+		logpi_target = logpi_target_q - logpi_target_v
+		logpi = tf.log(self.action)
+		del_Jpis = [tf.gradients(xs=param, ys=logpi)*(logpi - logpi_target) for param in self.net_params]
+		for i in range(len(self.net_params)):
+			self.net_params[i].assign(self.net_params[i] - lambda_pi*del_Jpis[i])
+		self.train_op = self.net_params
+
+	def train(self, *args):
+		# args (state)
+		# Note Jpi is intractable because of partition function
+		return self.sess.run([self.action, self.train_op]), feed_dict={
+			self.state: args[0]
+		}
+
+	def predict(self, *args):
+		# args (state)
+		return self.sess.run([self.action], feed_dict={
+			self.state: args[0]
+			})
