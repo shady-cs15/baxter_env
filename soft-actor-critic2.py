@@ -1,8 +1,13 @@
 import tensorflow as tf
 
 class ValueNetwork(object):
-	def __init__(self):
-		pass
+	def __init__(self, sess, state_dim, lambda_v, tau):
+		self.state_dim = state_dim
+		self.lambda_v = lambda_v
+		self.tau = tau
+		self.sess = sess
+
+		self._build_optimizer()
 
 	def _build_network(self, state, scope='Value', reuse=False):
 		#state is tf.placeholder(tf.float32, shape=[None, self.state_dim])
@@ -21,15 +26,39 @@ class ValueNetwork(object):
 
 	def _build_optimizer(self):
 		state = tf.placeholder(tf.float32, shape=[None, self.state_dim])
+		self.target = tf.placeholder(tf.float32, shape=[None, 1])
 		self.state, self.preds = self._build_network(state)
 		self.net_params = tf.trainable_variables(scope='Value')
 
-	def predict(self, state):
-		pass
+		self.Jv = 0.5*(tf.reduce_mean(self.preds-self.target)**2.0)
+		del_Jvs = [tf.gradients(xs=param, ys=Jv) for param in self.net_params]
+		for i in range(len(self.net_params)):
+			self.net_params[i].assign(self.net_params[i] - lambda_v*del_Jvs[i])
+		self.train_op = self.net_params
 
-	def train(self):
-		pass
+	def predict(self, *args):
+		# args (state)
+		return seld.sess.run([self.preds], feed_dict={
+			self.state:args[0]
+			})
+		
+	def train(self, *args):
+		# args (state, target)
+		# target is q(s, a) - logpi(s)
+		return self.sess.run([self.preds, self.Jv, self.train_op], feed_dict={
+			self.state: args[0],
+			self.target: args[1]
+			})
 
+	def update(self, value_net):
+		psi = self.sess.run(value_net.net_params)
+		psi_ = self.sess.run(self.net_params)
+		for i in range(len(psi_)):
+			psi_[i] = tau*psi[i] + (1-tau)*psi_[i]
+
+		# TODO assign psi_ to self.net_params
+		self.sess.run(feed_dict={self.net_params: psi_})
+				
 class CriticNetwork(object):
 	# value_net is a ValueNetwork object
 	def __init__(self, sess, state_dim, action_dim, value_net, gamma, lambda_q):
@@ -96,11 +125,15 @@ class CriticNetwork(object):
 class ActorNetwork(object):
 	# TO NOTE: policy is a gmm policy
 	def __init__(self, sess, state_dim, action_dim, value_net, critic_net, lambda_pi):
-		pass
+		self.sess = sess
+		self.state_dim = state_dim
+		self.action_dim = action_dim
+		self.value_net = value_net
+		self.critic_net = critic_net
 
 	def _build_network(self, state, scope='Actor', reuse=False):
 		# action needs to be sampled using GMM
-		pass
+		raise NotImplementedError
 
 	def _build_optimizer(self):
 		state = tf.placeholder(tf.float32, shape=[None, self.state_dim])
