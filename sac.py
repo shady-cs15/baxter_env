@@ -124,41 +124,69 @@ class CriticNetwork(object):
 
 
 class ActorNetwork(object):
-	# TO NOTE: policy is a gmm policy
-	def __init__(self, sess, state_dim, action_dim, value_net, critic_net, lambda_pi):
+	def __init__(self, sess, state_dim, action_dim, value_net, critic_net, lambda_pi, action_bound, scope='phi'):
 		self.sess = sess
 		self.state_dim = state_dim
 		self.action_dim = action_dim
 		self.value_net = value_net
 		self.critic_net = critic_net
+		self.lambda_pi = lambda_pi
+		self.scope = scope
+		self.action_bound = action_bound
 
-	def _build_network(self, state, scope='Actor', reuse=False):
-		# action needs to be sampled using GMM
+	def _build_network(self, state, reuse=False):
+		# returns a_t ~ pi(s_t), pi(a_t|s_t)
+		
+		scope = self.scope
+		with tf.variable_scope(scope+'/dense1'):
+			net = tf.layers.dense(state, 400, activation=tf.nn.relu, reuse=reuse)
+			#net = tf.contrib.layers.layer_norm(net, reuse=reuse)
+		with tf.variable_scope(scope+'/dense2'):
+			net = tf.layers.dense(tf.concat([net, action], 1), 300, activation=tf.nn.relu, reuse=reuse)
+			#net = tf.contrib.layers.layer_norm(net, reuse=reuse)
+		with tf.variable_scope(scope+'/dense3'):
+			net = tf.layers.dense(tf.concat([net, action], 1), 200, activation=tf.nn.relu, reuse=reuse)
+			#net = tf.contrib.layers.layer_norm(net, reuse=reuse)
+		with tf.variable_scope(scope+'/dense4_mu'):
+			mu = tf.layers.dense(net, self.action_dim, activation=None, reuse=reuse)
+		with tf.variable_scope(scope+'/dense4_sigma'):
+			sigma = tf.layers.dense(net, self.action_dim, activation=None, reuse=reuse)
+		with tf.variable_scope(scope+'/dense4_w'):
+			weights = tf.layers.dense(net, self.action_dim, activation=None, reuse=reuse)
+			weights = tf.divide(weights, tf.reduce_sum(weights))
+		
+		# TODO 
+		# sample action from mixture model
+		# self.action ~ mixture model
+		# self.action_prob = prob(self.action)
+		# self.action = self.action * self.action_bound
+		# return self.state, self.action, self.action_prob
 		raise NotImplementedError
+	
 
 	def _build_optimizer(self):
 		state = tf.placeholder(tf.float32, shape=[None, self.state_dim])
-		self.state, self.action = self._build_network(state)
+		self.state, self.action, self.action_prob = self._build_network(state)
+		self.net_params = tf.trainable_variables(sope=self.scope)
 
 		logpi_target_q = self.critic_net._build_network(self.state, self.action, reuse=True)
 		logpi_target_v = self.value_net._build_network(self.state, reuse=True)
 		logpi_target = logpi_target_q - logpi_target_v
-		logpi = tf.log(self.action)
-		del_Jpis = [tf.gradients(xs=param, ys=logpi)*(logpi - logpi_target) for param in self.net_params]
+		logpi = tf.log(self.action_prob)
+		del_Jpis = [tf.gradients(xs=param, ys=logpi)[0]*(logpi - logpi_target) for param in self.net_params]
+		self.train_ops = []
 		for i in range(len(self.net_params)):
-			self.net_params[i].assign(self.net_params[i] - lambda_pi*del_Jpis[i])
-		self.train_op = self.net_params
+			self.train_ops.append(self.net_params[i].assign(self.net_params[i] - self.lambda_pi*del_Jpis[i]))
 
 	def train(self, *args):
 		# args (state)
 		# Note Jpi is intractable because of partition function
-		return self.sess.run([self.action, self.train_op], feed_dict={
+		return self.sess.run([self.train_ops], feed_dict={
 			self.state: args[0]
 		})
 
 	def predict(self, *args):
-		pass
 		# args (state)
-		#return self.sess.run([self.action], feed_dict={
-		#	self.state: args[0]
-		#	})
+		return self.sess.run([self.action], feed_dict={
+			self.state: args[0]
+			})
