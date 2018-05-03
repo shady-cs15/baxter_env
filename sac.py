@@ -13,13 +13,10 @@ class ValueNetwork(object):
 		scope = self.scope
 		with tf.variable_scope(scope+'/dense1'):
 			net = tf.layers.dense(state, 400, activation=tf.nn.relu, reuse=reuse)
-			#net = tf.contrib.layers.layer_norm(net, reuse=reuse)
 		with tf.variable_scope(scope+'/dense2'):
 			net = tf.layers.dense(net, 300, activation=tf.nn.relu, reuse=reuse)
-			#net = tf.contrib.layers.layer_norm(net, reuse=reuse)
 		with tf.variable_scope(scope+'/dense3'):
 			net = tf.layers.dense(net, 200, activation=tf.nn.relu, reuse=reuse)
-			#net = tf.contrib.layers.layer_norm(net, reuse=reuse)
 		with tf.variable_scope(scope+'/dense4'):
 			preds = tf.layers.dense(net, 1, activation=None, reuse=reuse)
 		return state, preds
@@ -78,13 +75,10 @@ class CriticNetwork(object):
 		terminal = tf.placeholder(tf.float32, shape=[None, 1])
 		with tf.variable_scope(scope+'/dense1'):
 			net = tf.layers.dense(state, 400, activation=tf.nn.relu, reuse=reuse)
-			#net = tf.contrib.layers.layer_norm(net, reuse=reuse)
 		with tf.variable_scope(scope+'/dense2'):
 			net = tf.layers.dense(tf.concat([net, action], 1), 300, activation=tf.nn.relu, reuse=reuse)
-			#net = tf.contrib.layers.layer_norm(net, reuse=reuse)
 		with tf.variable_scope(scope+'/dense3'):
 			net = tf.layers.dense(tf.concat([net, action], 1), 200, activation=tf.nn.relu, reuse=reuse)
-			#net = tf.contrib.layers.layer_norm(net, reuse=reuse)
 		with tf.variable_scope(scope+'/dense4'):
 			preds = tf.layers.dense(net, 1, activation=None, reuse=reuse)
 		return state, action, preds, next_state, reward, terminal
@@ -140,13 +134,10 @@ class ActorNetwork(object):
 		scope = self.scope
 		with tf.variable_scope(scope+'/dense1'):
 			net = tf.layers.dense(state, 400, activation=tf.nn.relu, reuse=reuse)
-			#net = tf.contrib.layers.layer_norm(net, reuse=reuse)
 		with tf.variable_scope(scope+'/dense2'):
 			net = tf.layers.dense(tf.concat([net, action], 1), 300, activation=tf.nn.relu, reuse=reuse)
-			#net = tf.contrib.layers.layer_norm(net, reuse=reuse)
 		with tf.variable_scope(scope+'/dense3'):
 			net = tf.layers.dense(tf.concat([net, action], 1), 200, activation=tf.nn.relu, reuse=reuse)
-			#net = tf.contrib.layers.layer_norm(net, reuse=reuse)
 		with tf.variable_scope(scope+'/dense4_mu'):
 			mu = tf.layers.dense(net, self.action_dim, activation=None, reuse=reuse)
 		with tf.variable_scope(scope+'/dense4_sigma'):
